@@ -1,0 +1,24 @@
+Laravel API development best practices
+    /check back here from time to time/
+https://hafiz.dev/blog/laravel-api-development-restful-best-practices
+
+
+======>>>>postponed untill installing Sanctum
+
+API versioning based on URL with separate route files:
+    /only routes + tests, controller will be added later/
+    /same as done hafiz/
+https://laravel.io/articles/api-versioning-in-laravel
+
+
+Route Group + Controller Namespaces + Handlign Deprecated Endpoints
+    / What I liked most was the use of namespaces for controllers when grouping routes. /
+    / same as done hafiz/
+https://serveravatar.com/laravel-api-versioning/#creating-api-routes-with-versions-6
+
+<<<<<<<<========postponed untill installing Sanctum
+
+
+JSON API Resources (read tommorow - 10.06.2026)
+https://laravel.com/docs/13.x/eloquent-resources#jsonapi-resources
+https://programmingfields.com/laravel-13-json-api-resources/

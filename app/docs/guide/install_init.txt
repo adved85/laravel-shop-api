@@ -1,0 +1,130 @@
+abc-shop.txt
+============
+
+E-commerce  laravel API + react Vite | hindi
+https://www.youtube.com/playlist?list=PLRB0wzP8AS_GMe_1P-hAZOYjn-a2CdhWA
+26 parts
+channel ==> PHP TECH LIFE
+<< original one >>
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+==========================================================
+
+1) create back and front of e-commerce portal
+
+
+create laravel project
+
+
+$ docker-composer up -f
+$ ./shell.sh
+$ mkdir laravel-shop-api
+$ cd laravel-shop-api
+$ composer create-project laravel/laravel laravel-shop-api
+
+	(after updating devilbox for PHP 8.3 & 8.4, Laravel 13.8.0 was downloaded)
+
+
+/etc/hosts:
+127.0.0.1 laravel-shop-api.dvl.to
+
+$ cd ~/
+$ sudo nano /etc/hosts
+(and map IP with host)
+
+
+create devilbox symlink from external directory
+(from manually created, not created by composer)
+$ ln -s laravel-shop-api/public/ htdocs
+
+
+git init
+--------
+	# change authenticated user
+	1. Add the SSH key to the SSH agent:
+	ssh -T git@github.com
+	    Hi rubenK93!
+
+	eval "$(ssh-agent -s)"
+	ssh-add ~/.ssh/id_adved85_rsa
+	ssh -T git@github.com
+	    Hi adved85!
+
+
+Database
+--------
+> .env
+	#pgsql
+	DB_CONNECTION=pgsql
+	DB_HOST=127.0.0.1
+	DB_PORT=5432
+	DB_DATABASE=laravel_shop_api
+	DB_USERNAME=postgres
+	DB_PASSWORD=
+
+> pgadmin4
+		server: PostgreSQL
+		host name/address: pgsql/ http://localhost:88
+		port: 5432
+		database: laravel_shop_api
+		user: postgres
+		(no password for "postgres" user)
+
+		✅master password for PGadmin user -> pgadmin4
+		<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+	> drop all tables in postgres
+			DROP SCHEMA public CASCADE;
+			CREATE SCHEMA public;
+	> drop all tables and migrate from artisan
+			$ php artisan migrate:fresh
+
+
+https://youtu.be/731wley-JfM?list=PLRB0wzP8AS_GMe_1P-hAZOYjn-a2CdhWA&t=907
+
+
+> add new DB
+
+CREATE DATABASE laravel_shop_api
+    ENCODING = 'UTF8'
+    TEMPLATE = template0;
+
+
+> add enum "system_role" to "users" table
+
+    $table->enum('system_role', [
+        'admin',
+        'owner',
+        'customer'
+    ])->default('customer');
+
+
+> run migration
+$ php artisan migrate
+
+
+> next is installing an image management package - intervention image
+ (PHP 8.3 or greater is required)
+
+	$composer require intervention/image
+
+> new repo on github
+[dont forget to switch to adved85]
+
+	new preo: laravel-shop-api
+	private
+
+inside the root folder
+
+    git config user.name "adved85"
+    git config user.email "adved85@gmail.com"
+
+	echo "# laravel-shop-api" >> README.md
+	git init
+	git add README.md
+	git commit -m "first commit"
+	git branch -M main
+	git remote add origin git@github.com:adved85/laravel-shop-api.git
+	# git remote set-url origin git@github.com:adved85/laravel-shop-api.git
+	git push -u origin main
+
