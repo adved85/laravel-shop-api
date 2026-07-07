@@ -22,3 +22,9 @@ https://serveravatar.com/laravel-api-versioning/#creating-api-routes-with-versio
 JSON API Resources (read tommorow - 10.06.2026)
 https://laravel.com/docs/13.x/eloquent-resources#jsonapi-resources
 https://programmingfields.com/laravel-13-json-api-resources/
+
+Abount Sanctum API
+https://laravel.com/docs/13.x/sanctum
+
+How to work with PostgreSQL via pgAdmin4 (any tutor + pgsql commands)
+
