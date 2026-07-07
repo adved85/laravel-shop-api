@@ -1,0 +1,292 @@
+unified_api_response_system.txt
+================================
+
+GOAL
+----
+Every response from every route — whether it comes from a controller,
+a failed validation, a thrown exception, or a 404 — returns the same
+JSON shape. No surprises for the frontend.
+
+
+RESPONSE SHAPES
+---------------
+
+Success:
+    {
+        "success": true,
+        "message": "...",
+        "code":    200,
+        "data":    { ... }
+    }
+
+Error (no field detail):
+    {
+        "success": false,
+        "message": "...",
+        "code":    4xx / 5xx
+    }
+
+Error (with field detail, e.g. validation):
+    {
+        "success": false,
+        "message": "Validation failed",
+        "code":    422,
+        "errors":  { "email": ["..."], "password": ["..."] }
+    }
+
+Rule: "errors" key only appears when there are field-level details.
+      "data" key only appears on success responses.
+
+
+================================================================
+THE FOUR PIECES
+================================================================
+
+PIECE 1 — app/Enums/HTTPCodes.php
+----------------------------------
+Single source of truth for every status code used in the project.
+No magic numbers anywhere else.
+
+    case OK                  = 200
+    case CREATED             = 201
+    case ACCEPTED            = 202   // async / queued operation started
+    case NO_CONTENT          = 204   // success, nothing to return (e.g. logout)
+    case BAD_REQUEST         = 400
+    case UNAUTHENTICATED     = 401   // not logged in / wrong credentials
+    case UNAUTHORIZED        = 403   // logged in but not allowed
+    case NOT_FOUND           = 404
+    case CONFLICT            = 409   // e.g. duplicate resource
+    case VALIDATION_ERROR    = 422
+    case TOO_MANY_REQUESTS   = 429
+    case INTERNAL_SERVER_ERROR = 500
+    case SERVICE_UNAVAILABLE = 503
+
+Usage anywhere in the project:
+    HTTPCodes::NOT_FOUND->value   // returns 404 as int
+
+
+----------------------------------------------------------------
+
+PIECE 2 — app/Support/API/ApiResponse.php
+------------------------------------------
+The response factory. Inject it into any controller via the constructor.
+It wraps response()->json() and enforces the shape above.
+
+TWO BASE METHODS (you rarely call these directly):
+
+    success(mixed $data, string $message, int $status): JsonResponse
+        — builds { success: true, message, code, data }
+
+    error(string $message, int $status, ?array $errors): JsonResponse
+        — builds { success: false, message, code }
+        — adds "errors" key only when $errors is not null
+
+
+SUCCESS HELPERS (call these in controllers):
+
+    ->ok($data, $message = 'Success')       // 200
+    ->created($data, $message = 'Created')  // 201
+    ->accepted($data, $message = 'Accepted')// 202
+    ->noContent()                           // 204  returns Response, not JsonResponse
+
+
+ERROR HELPERS (call these in controllers):
+
+    ->badRequest($message)      // 400
+    ->unauthenticated($message) // 401  — wrong credentials / not logged in
+    ->unauthorized($message)    // 403  — logged in but forbidden
+    ->notFound($message)        // 404
+    ->conflict($message)        // 409
+    ->validationError($message, ?array $errors)  // 422
+    ->serverError($message)     // 500
+
+
+HOW TO INJECT IT IN A CONTROLLER:
+
+    class ProductController extends Controller
+    {
+        public function __construct(private ApiResponse $apiResponse) {}
+
+        public function index()
+        {
+            $products = Product::all();
+            return $this->apiResponse->ok($products);
+        }
+
+        public function store(ProductRequest $request)
+        {
+            $product = Product::create($request->validated());
+            return $this->apiResponse->created($product);
+        }
+
+        public function destroy(Product $product)
+        {
+            $product->delete();
+            return $this->apiResponse->noContent();
+        }
+    }
+
+NOTE: $data passed to ok/created/accepted can be:
+  - an Eloquent model or collection  (auto-serialized)
+  - a plain array
+  - anything implementing Arrayable
+
+
+----------------------------------------------------------------
+
+PIECE 3 — app/Http/Requests/ApiFormRequests.php
+-------------------------------------------------
+Abstract base class for every API FormRequest.
+Overrides two Laravel hooks so validation and authorization failures
+return the same JSON shape instead of Laravel's default HTML error page.
+
+WHEN VALIDATION FAILS  →  failedValidation():
+    Throws HttpResponseException immediately (bypasses the global handler).
+    Returns:
+        { "success": false, "message": "Validation failed",
+          "code": 422, "errors": { field: [messages] } }
+
+WHEN authorize() RETURNS FALSE  →  failedAuthorization():
+    Throws HttpResponseException immediately.
+    Returns:
+        { "success": false, "message": "Forbidden", "code": 403 }
+
+
+HOW TO CREATE AN API REQUEST:
+
+    // app/Http/Requests/admin/ProductRequest.php
+    namespace App\Http\Requests\admin;
+
+    use App\Http\Requests\ApiFormRequests;
+
+    class ProductRequest extends ApiFormRequests
+    {
+        public function authorize(): bool
+        {
+            return true; // or check roles/policies here
+        }
+
+        public function rules(): array
+        {
+            return [
+                'name'  => 'required|string|max:255',
+                'price' => 'required|numeric|min:0',
+            ];
+        }
+    }
+
+    // in the controller — validated() gives only the safe, validated fields
+    public function store(ProductRequest $request)
+    {
+        $validated = $request->validated();
+        ...
+    }
+
+IMPORTANT: Always extend ApiFormRequests, never extend FormRequest directly
+           for API routes. FormRequest alone would return HTML on failure.
+
+
+----------------------------------------------------------------
+
+PIECE 4 — bootstrap/app.php  (withExceptions)
+-----------------------------------------------
+The last safety net. Catches any exception that was NOT already handled
+by a FormRequest (pieces 3) or an explicit controller return (piece 2).
+
+This covers:
+  - Exceptions thrown by middleware
+  - Model binding failures (ModelNotFoundException → 404)
+  - Auth middleware failures (AuthenticationException → 401)
+  - Policy/gate failures (AuthorizationException → 403)
+  - Rate limiter (ThrottleRequestsException → 429)
+  - Any uncaught generic exception → 500
+
+TWO GUARDS:
+
+    shouldRenderJsonWhen(fn($req) => $req->is('api/*'))
+        — tells Laravel to treat api/* as JSON-expecting,
+          even if the client didn't send Accept: application/json
+
+    if (!$request->is('api/*')) return null
+        — inside the render callback: non-API routes fall through
+          to Laravel's default HTML error page (Ignition / Blade)
+
+
+ENVIRONMENT BEHAVIOUR:
+
+    local:
+        500 response includes "trace" (first 5 frames) for easier debugging.
+        { "success": false, "message": "...", "code": 500, "trace": [...] }
+
+    production:
+        report($e) logs the exception, then returns a generic message.
+        { "success": false, "message": "Internal server error", "code": 500 }
+
+
+================================================================
+HOW THE THREE LAYERS WORK TOGETHER
+================================================================
+
+Request arrives at POST /api/admin/products
+    |
+    ├─ ProductRequest::authorize() returns false
+    │       → ApiFormRequests::failedAuthorization()
+    │       → HttpResponseException thrown  ← response sent here
+    │       → { success: false, message: "Forbidden", code: 403 }
+    │
+    ├─ ProductRequest::rules() fails
+    │       → ApiFormRequests::failedValidation()
+    │       → HttpResponseException thrown  ← response sent here
+    │       → { success: false, message: "Validation failed",
+    │            code: 422, errors: { ... } }
+    │
+    ├─ Controller runs, calls $this->apiResponse->created($product)
+    │       → ApiResponse::success()  ← response sent here
+    │       → { success: true, message: "Created", code: 201, data: { ... } }
+    │
+    └─ Controller throws unexpected exception (e.g. DB is down)
+            → bootstrap/app.php render() catches it  ← response sent here
+            → { success: false, message: "Internal server error", code: 500 }
+
+The three layers are ordered by specificity:
+    FormRequest failures  →  ApiResponse in controller  →  Global handler
+
+
+================================================================
+QUICK REFERENCE
+================================================================
+
+What happened              | Method to use
+---------------------------|------------------------------------------
+Resource returned          | ->ok($data)
+Resource created           | ->created($data)
+Async job accepted         | ->accepted($data)
+Delete / logout success    | ->noContent()
+Bad input (not validation) | ->badRequest('reason')
+Wrong credentials          | ->unauthenticated('message')
+No permission              | ->unauthorized('message')
+Resource not found         | ->notFound('message')
+Duplicate resource         | ->conflict('message')
+Validation failed          | ->validationError('msg', $errors)
+Unrecoverable error        | ->serverError('message')
+
+
+================================================================
+ADDING A NEW RESOURCE (CHECKLIST)
+================================================================
+
+[ ] Create app/Http/Requests/admin/FooRequest.php
+      extends ApiFormRequests, define authorize() and rules()
+
+[ ] Create app/Http/Controllers/admin/FooController.php
+      inject ApiResponse via constructor
+
+[ ] Use $request->validated() — never $request->all()
+
+[ ] Return $this->apiResponse->ok/created/noContent/etc.
+
+[ ] Register routes in routes/api.php
+
+[ ] Test that validation failure returns 422 with "errors" field
+[ ] Test that a missing route returns 404 with standard shape
+[ ] Test that unauthenticated access returns 401 (if route is protected)
