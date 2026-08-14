@@ -1,9 +1,8 @@
 <?php
 
-namespace App\Http\Requests\admin;
+namespace App\Http\Requests\Admin;
 
 use Illuminate\Contracts\Validation\ValidationRule;
-// use Illuminate\Foundation\Http\FormRequest;
 use App\Http\Requests\ApiFormRequests;
 
 class AuthRequest extends ApiFormRequests
@@ -23,20 +22,20 @@ class AuthRequest extends ApiFormRequests
      */
     public function rules(): array
     {
-
         $login = str_contains(request()->uri(), 'login');
         $register = str_contains(request()->url(), 'register');
 
         if ($login) {
             return [
-                'email' => 'required|email',
-                'password' => 'required|string'
+                'email'    => 'required|email',
+                'password' => 'required|string',
             ];
         }
+
         if ($register) {
             return [
-                'name' => 'required|string|max:255',
-                'email' => 'required|email|unique:users',
+                'name'     => 'required|string|max:255',
+                'email'    => 'required|email|unique:users',
                 'password' => 'required|min:8|confirmed',
             ];
         }

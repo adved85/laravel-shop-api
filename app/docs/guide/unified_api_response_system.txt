@@ -154,8 +154,8 @@ WHEN authorize() RETURNS FALSE  →  failedAuthorization():
 
 HOW TO CREATE AN API REQUEST:
 
-    // app/Http/Requests/admin/ProductRequest.php
-    namespace App\Http\Requests\admin;
+    // app/Http/Requests/Admin/ProductRequest.php
+    namespace App\Http\Requests\Admin;
 
     use App\Http\Requests\ApiFormRequests;
 
@@ -275,7 +275,7 @@ Unrecoverable error        | ->serverError('message')
 ADDING A NEW RESOURCE (CHECKLIST)
 ================================================================
 
-[ ] Create app/Http/Requests/admin/FooRequest.php
+[ ] Create app/Http/Requests/Admin/FooRequest.php
       extends ApiFormRequests, define authorize() and rules()
 
 [ ] Create app/Http/Controllers/admin/FooController.php

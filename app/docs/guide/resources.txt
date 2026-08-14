@@ -1,30 +1,144 @@
-Laravel API development best practices
-    /check back here from time to time/
+resources.txt
+=============
+Curated references for this project. Each link is here for a reason —
+the note below it explains what to take from it.
+
+Check back as the project grows. Add links only when they change how you think,
+not just because they exist.
+
+
+================================================================
+API DESIGN & BEST PRACTICES
+================================================================
+
+Laravel API Development — RESTful Best Practices
 https://hafiz.dev/blog/laravel-api-development-restful-best-practices
 
+    Solid foundation article. The main takeaway: treat versioning, response
+    shape, and error handling as first-class concerns from day one — not
+    something you bolt on later. Retroactively versioning a live API is
+    painful. This project follows that principle.
 
-======>>>>postponed untill installing Sanctum
+    Key quote: "API Versioning: Do It From Day One"
 
-API versioning based on URL with separate route files:
-    /only routes + tests, controller will be added later/
-    /same as done hafiz/
+
+================================================================
+API VERSIONING
+================================================================
+
+API Versioning in Laravel (URL-based, separate route files)
 https://laravel.io/articles/api-versioning-in-laravel
 
+    The approach closest to what this project uses. Covers URL-based versioning
+    with one route file per version. Worth reading for the testing section —
+    shows how to write version-aware feature tests using a shared base test class
+    instead of duplicating tests across versions.
 
-Route Group + Controller Namespaces + Handlign Deprecated Endpoints
-    / What I liked most was the use of namespaces for controllers when grouping routes. /
-    / same as done hafiz/
+Route Groups + Controller Namespaces + Handling Deprecated Endpoints
 https://serveravatar.com/laravel-api-versioning/#creating-api-routes-with-versions-6
 
-<<<<<<<<========postponed untill installing Sanctum
+    Most interesting section: how to handle deprecated API versions gracefully.
+    Instead of removing v1 routes entirely, you can return a 410 Gone response
+    with a deprecation notice header pointing clients to the new version.
+    Useful once v2 ships.
+
+    Also covers using controller namespaces inside route groups, which aligns
+    with the Admin/V1/ and Api/V1/ structure used here.
+
+API Versioning in Laravel 11
+https://laravel-news.com/api-versioning-in-laravel-11
+
+    Laravel 11-specific. Covers the withRouting() and then: callback approach
+    for registering versioned routes in bootstrap/app.php — the alternative
+    strategy documented in api_versioning_structure.txt.
 
 
-JSON API Resources (read tommorow - 10.06.2026)
-https://laravel.com/docs/13.x/eloquent-resources#jsonapi-resources
+================================================================
+API RESOURCES & RESPONSE SHAPING
+================================================================
+
+Laravel Eloquent Resources (official docs, Laravel 13)
+https://laravel.com/docs/13.x/eloquent-resources
+
+    The authoritative reference. The sections worth reading carefully:
+        - "Resource Collections" — difference between ::collection() and a
+          dedicated Collection class; when you need the latter
+        - "Conditional Attributes" — $this->when() and $this->mergeWhen()
+          for fields that appear only in certain contexts (e.g. only for admins)
+        - "Nested Resources" — how to embed related models (e.g. parent category
+          inline) without making extra queries
+        - "Pagination" — why ::collection() on a paginator auto-includes links/meta
+
+JSON:API Resources in Laravel 13
 https://programmingfields.com/laravel-13-json-api-resources/
 
-Abount Sanctum API
+    Covers the JSON:API specification format as an alternative to the custom
+    envelope used in this project. Worth knowing the standard exists, even if
+    we don't follow it strictly. Useful context if a future client expects
+    spec-compliant responses.
+
+
+================================================================
+AUTHENTICATION
+================================================================
+
+Laravel Sanctum (official docs, Laravel 13)
 https://laravel.com/docs/13.x/sanctum
 
-How to work with PostgreSQL via pgAdmin4 (any tutor + pgsql commands)
+    The auth layer used in this project. Key sections:
+        - "API Token Authentication" — how tokens are issued, stored, and revoked
+        - "Revoking Tokens" — currentAccessToken()->delete() vs tokens()->delete()
+          (the difference between logging out one device vs all devices)
+        - "Token Abilities" — scoping tokens to specific permissions (e.g. a token
+          that can only read, not write); useful when the API serves mobile apps
+          alongside the admin panel
+        - "SPA Authentication" — different flow using cookies; not used here but
+          relevant if a browser-based admin frontend is added later
 
+
+================================================================
+DATABASE & TOOLING
+================================================================
+
+DBeaver — Universal Database GUI (recommended)
+https://dbeaver.io/download/
+
+    Desktop app that connects to PostgreSQL (and any other DB) directly.
+    More practical than pgAdmin for day-to-day development work.
+
+    What makes it useful here:
+        - Tables view — see all columns, their types, defaults, and
+          nullable flags at a glance without writing a query
+        - DDL tab — shows the exact CREATE TABLE statement for any table;
+          useful for verifying that migrations produced the right schema
+        - ER Diagram — auto-generated visual diagram of tables and their
+          foreign key relationships; invaluable when the schema grows
+        - Data tab — browse and edit rows directly, with filtering
+        - No browser required — runs as a native desktop app, faster than pgAdmin
+
+    Connection setup for this project (Devilbox PostgreSQL):
+        Host:     127.0.0.1
+        Port:     5432
+        Database: laravel_shop_api
+        User:     postgres
+        Password: (none)
+
+
+pgAdmin 4 — Video Tutorials
+https://www.pgadmin.org/videos/
+
+pgAdmin 4 — Official Documentation
+https://www.pgadmin.org/docs/pgadmin4/latest/
+
+W3Schools — PostgreSQL with pgAdmin 4
+https://www.w3schools.com/postgresql/postgresql_pgadmin4.php
+
+    Browser-based GUI for PostgreSQL. More complete than DBeaver for
+    server administration tasks: role management, backup/restore, and
+    server-level monitoring. Less convenient for quick schema inspection
+    during development — use DBeaver for that, pgAdmin for admin tasks.
+
+    Common tasks during development:
+        - Run raw SQL:      Tools → Query Tool
+        - Drop all tables:  DROP SCHEMA public CASCADE; CREATE SCHEMA public;
+        - After reset:      php artisan migrate

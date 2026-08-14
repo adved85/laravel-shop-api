@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 
@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
 use App\Models\User;
-use App\Http\Requests\admin\AuthRequest;
+use App\Http\Requests\Admin\AuthRequest;
 
 use App\Support\API\ApiResponse;
 

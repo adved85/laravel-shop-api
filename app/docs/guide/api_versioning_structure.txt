@@ -1,0 +1,463 @@
+api_versioning_structure.txt
+=============================
+
+GOAL
+----
+Every API version is fully isolated — its own routes, controllers, resources,
+and requests. Adding v2 never touches v1. Models, migrations, and business
+logic are shared and never versioned.
+
+
+================================================================
+THE VERSIONING RULE
+================================================================
+
+    Versioned                   |   Not versioned
+    ----------------------------|-----------------------------
+    Routes                      |   Models
+    Controllers                 |   Migrations
+    API Resources               |   Services / business logic
+    Form Requests               |   Observers, Events, Jobs
+    Feature Tests               |
+    (when validation changes)   |
+    ----------------------------|-----------------------------
+
+Models represent the database table — they don't change between versions.
+What changes between v1 and v2 is HOW you expose that data, which is the
+job of Controllers, Resources, and Requests.
+
+
+================================================================
+FILE STRUCTURE
+================================================================
+
+routes/
+    api.php             ← entry point — registers all versioned route files
+    api/
+        v1.php          ← public API v1 routes
+        v2.php          ← public API v2 routes
+    admin/
+        v1.php          ← admin routes v1
+
+app/Http/
+    Controllers/
+        Api/
+            V1/
+                CategoryController.php
+            V2/
+                CategoryController.php
+        Admin/
+            V1/
+                CategoryController.php
+                AuthController.php
+
+    Requests/
+        ApiFormRequests.php         ← abstract base (shared, not versioned)
+        Admin/
+            AuthRequest.php
+            V1/
+                CategoryRequest.php
+        Api/
+            V1/
+                CategoryRequest.php
+
+    Resources/
+        Admin/
+            V1/
+                CategoryResource.php
+        Api/
+            V1/
+                CategoryResource.php
+
+    *** PascalCase  (V1, V2, Admin) for PHP class directories
+    *** lowercase   (v1, v2, admin) for URL path segments
+
+
+================================================================
+ROUTE REGISTRATION  —  routes/api.php
+================================================================
+
+All versioned route files are included here. The "api" middleware group
+(including authentication and rate limiting) is applied automatically
+to everything registered in this file by Laravel's withRouting(api:...).
+
+    // public API
+    Route::prefix('v1')->name('api.v1.')
+        ->group(base_path('routes/api/v1.php'));
+
+    Route::prefix('v2')->name('api.v2.')
+        ->group(base_path('routes/api/v2.php'));
+
+    // admin API — requires authentication
+    Route::prefix('admin/v1')->name('admin.v1.')->middleware('auth:sanctum')
+        ->group(base_path('routes/admin/v1.php'));
+
+Result URLs:
+    /api/v1/categories
+    /api/v2/categories
+    /api/admin/v1/categories
+
+ALTERNATIVE — drop the /api prefix from admin URLs entirely.
+Register admin routes in the "then" callback in bootstrap/app.php:
+
+    ->withRouting(
+        api: __DIR__.'/../routes/api.php',
+        then: function () {
+            Route::middleware(['api', 'auth:sanctum'])
+                ->prefix('admin/v1')
+                ->name('admin.v1.')
+                ->group(base_path('routes/admin/v1.php'));
+        }
+    )
+    Result: /admin/v1/categories  (no /api prefix)
+
+Inside each versioned route file, use apiResource for standard CRUD:
+
+    // routes/admin/v1.php
+    use App\Http\Controllers\Admin\V1\CategoryController;
+    Route::apiResource('categories', CategoryController::class);
+
+    Generated routes:
+        GET     /api/admin/v1/categories              → index
+        POST    /api/admin/v1/categories              → store
+        GET     /api/admin/v1/categories/{category}   → show
+        PUT     /api/admin/v1/categories/{category}   → update
+        PATCH   /api/admin/v1/categories/{category}   → update
+        DELETE  /api/admin/v1/categories/{category}   → destroy
+
+Verify with:
+    php artisan route:list
+
+
+================================================================
+ARTISAN COMMANDS — creating a new versioned resource
+================================================================
+
+    # 1. Model + migration + factory + seeder  (once, shared, not versioned)
+    php artisan make:model Category -mfs
+
+    # 2. Controller with route model binding
+    php artisan make:controller --api --model=Category Admin/V1/CategoryController
+
+    # 3. API Resource (version-specific response shape)
+    php artisan make:resource Admin/V1/CategoryResource
+
+    # 4. Form Requests (manually placed for the correct versioned namespace)
+    php artisan make:request Admin/V1/CategoryRequest
+
+Run php artisan route:list after step 2 and 4 to verify — no rebuild needed.
+
+
+================================================================
+API RESOURCES — what they are and why use them
+================================================================
+
+A Resource is a transformer between a Model and the JSON response.
+It decides exactly which fields are exposed and how they are formatted.
+
+WITHOUT a Resource, the controller returns the raw Eloquent model:
+    → every database column is exposed, including internal ones
+      (remember_token, pivot columns, timestamps you didn't want, etc.)
+
+WITH a Resource, the output is explicit and intentional:
+
+    // app/Http/Resources/Admin/V1/CategoryResource.php
+    public function toArray(Request $request): array
+    {
+        return [
+            'id'         => $this->id,
+            'name'       => $this->name,
+            'slug'       => $this->slug,
+            'parent_id'  => $this->parent_id,
+            'in_use'     => $this->in_use,
+            'order'      => $this->order,
+            'created_at' => $this->created_at,
+        ];
+        // internal_notes, pivot columns, etc. are NOT listed → not exposed
+    }
+
+Usage in controllers:
+
+    // single item
+    return $this->apiResponse->ok(new CategoryResource($category));
+
+    // paginated collection — see paginated() section below
+    return $this->apiResponse->paginated($categories, CategoryResource::class);
+
+    // after update, always refresh to return the saved state
+    return $this->apiResponse->ok(new CategoryResource($category->refresh()));
+
+Each API version has its own Resource. V2 can add, rename, or remove fields
+without touching V1's Resource. This is the main value of versioned Resources.
+
+
+================================================================
+PAGINATED RESPONSES  —  apiResponse->paginated()
+================================================================
+
+Laravel's paginated Eloquent results (Category::paginate(20)) carry
+pagination metadata — total, current page, links — that must reach the client.
+This creates a conflict with our standard response envelope.
+
+PROBLEM A — wrapping in ok() creates a nested data.data:
+
+    return $this->apiResponse->ok(CategoryResource::collection($categories));
+    // ApiResponse::success() wraps everything under "data"
+    // ResourceCollection already has its own "data" key inside
+    →  { "success": true, "code": 200, "data": { "data": [...], "links": {}, "meta": {} } }
+                                                  ↑ clash — two "data" keys nested
+
+PROBLEM B — returning the collection directly loses the envelope:
+
+    return CategoryResource::collection($categories);
+    →  { "data": [...], "links": {...}, "meta": {...} }
+    // no "success", no "code", no "message" — inconsistent with every other route
+
+SOLUTION — apiResponse->paginated():
+
+    return $this->apiResponse->paginated($categories, CategoryResource::class);
+    →
+    {
+      "success": true,
+      "message": "Success",
+      "code": 200,
+      "data": {
+        "items": [ ... ],          ← renamed from "data" to avoid the clash
+        "pagination": {
+          "total": 50,
+          "per_page": 20,
+          "current_page": 1,
+          "last_page": 3,
+          "from": 1,
+          "to": 20
+        },
+        "links": {
+          "first": "...?page=1",
+          "last":  "...?page=3",
+          "prev":  null,
+          "next":  "...?page=2"
+        }
+      }
+    }
+
+The method signature:
+    paginated(LengthAwarePaginator $paginator, string $resourceClass, string $message = 'Success')
+
+All paginator methods it uses are in:
+    vendor/laravel/framework/src/Illuminate/Pagination/LengthAwarePaginator.php
+
+
+================================================================
+FORM REQUESTS — CategoryRequest patterns
+================================================================
+
+All API form requests extend ApiFormRequests (not Laravel's FormRequest directly).
+ApiFormRequests overrides failedValidation() and failedAuthorization() to return
+the standard JSON error envelope automatically.
+
+    class CategoryRequest extends ApiFormRequests
+    {
+        public function authorize(): bool
+        {
+            return true;
+            // return auth()->user()->isAdmin(); ← role check goes here
+        }
+
+        public function rules(): array
+        {
+            $category = $this->route('category'); // resolved model on PUT/PATCH, null on POST
+
+            $nameRule = Rule::unique('categories', 'name');
+            $slugRule = Rule::unique('categories', 'slug');
+
+            if ($category) {
+                // ignore the current record so it can be saved with its own name/slug
+                $nameRule = $nameRule->ignore($category->id);
+                $slugRule = $slugRule->ignore($category->id);
+            }
+
+            if ($this->isMethod('POST')) {
+                return [
+                    'name' => ['required', 'string', 'min:2', 'max:200', $nameRule],
+                    ...
+                ];
+            }
+
+            if ($this->isMethod('PUT')) {
+                return [
+                    'name' => ['required', 'string', 'min:2', 'max:200', $nameRule], // full replacement
+                    ...
+                ];
+            }
+
+            if ($this->isMethod('PATCH')) {
+                return [
+                    'name' => ['sometimes', 'string', 'min:2', 'max:200', $nameRule], // partial update
+                    ...
+                ];
+            }
+
+            return [];
+        }
+
+        protected function prepareForValidation(): void
+        {
+            // auto-generate slug from name if the client did not provide one
+            // this runs BEFORE rules() — so "slug" is available for the "required" rule
+            if (!$this->has('slug') && $this->has('name')) {
+                $this->merge(['slug' => Str::slug($this->name)]);
+            }
+        }
+
+        public function attributes(): array
+        {
+            // readable field labels in validation error messages
+            return ['name' => 'category name', 'parent_id' => 'parent category', ...];
+        }
+    }
+
+Key rules:
+    - Always call $request->validated() in the controller, never $request->all()
+    - PUT   → required fields stay required (full replacement)
+    - PATCH → all fields are "sometimes" (client sends only what changes)
+    - Unique rules on update must call ->ignore($id) or the record can never be saved
+
+
+================================================================
+RATE LIMITING
+================================================================
+
+Default: 60 requests per minute per authenticated user (or per IP if not logged in).
+
+Where the default is defined — app/Providers/AppServiceProvider.php:
+
+    use Illuminate\Cache\RateLimiting\Limit;
+    use Illuminate\Support\Facades\RateLimiter;
+
+    public function boot(): void
+    {
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+    }
+
+Where it is applied — the "api" middleware group includes throttle:api automatically.
+Every route in routes/api.php is already rate-limited by this.
+
+To change the global limit: edit Limit::perMinute(60) in AppServiceProvider.
+
+To override for a specific route or group:
+
+    // hard-coded: 10 requests per 1 minute window
+    Route::middleware('throttle:10,1')->post('/login', ...);
+
+    // named limiter — define in AppServiceProvider, apply by name
+    RateLimiter::for('admin', function (Request $request) {
+        return Limit::perMinute(30)->by($request->user()?->id ?: $request->ip());
+    });
+    Route::middleware('throttle:admin')->group(base_path('routes/admin/v1.php'));
+
+When the limit is exceeded, ThrottleRequestsException is thrown (HTTP 429).
+It is already handled in bootstrap/app.php and returns the standard error envelope:
+    { "success": false, "message": "Too many requests", "code": 429 }
+
+
+================================================================
+FEATURE TESTING
+================================================================
+
+Feature tests cover versioned endpoints end-to-end — real HTTP request
+through middleware, auth, controller, resource, and response shape.
+One test class per resource group, mirroring the controller structure.
+
+    tests/
+        Feature/
+            AdminV1CategoryTest.php    ← admin API tests (categories, auth, etc.)
+
+REQUIRED SETUP:
+
+    use PHPUnit\Framework\Attributes\Test;  ← MUST import this.
+                                               Without it, #[Test] is silently
+                                               ignored and the method never runs.
+
+    class AdminV1CategoryTest extends TestCase
+    {
+        use RefreshDatabase, WithFaker;
+
+        protected User $adminUser;
+
+        protected function setUp(): void
+        {
+            parent::setUp();
+
+            $this->adminUser = User::factory()->create([
+                'email'       => 'admin@example.com',
+                'password'    => bcrypt('password123'),
+                'system_role' => 'admin',
+            ]);
+        }
+    }
+
+WRITING A TEST — example: categories index
+
+    #[Test]
+    public function admin_v1_categories_index_returns_paginated_list(): void
+    {
+        Category::factory(3)->create();
+
+        $response = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson('/api/admin/v1/categories');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'success',
+                'message',
+                'code',
+                'data' => [
+                    'items',
+                    'pagination' => ['total', 'per_page', 'current_page', 'last_page', 'from', 'to'],
+                    'links'      => ['first', 'last', 'prev', 'next'],
+                ],
+            ])
+            ->assertJson(['success' => true, 'code' => 200])
+            ->assertJsonCount(3, 'data.items');
+    }
+
+KEY RULES:
+    - Always import PHPUnit\Framework\Attributes\Test — without it, #[Test]
+      is silently ignored by PHP and PHPUnit never picks up the method
+    - Test methods must return void — never JsonResponse or any other type
+    - Use actingAs($user, 'sanctum') for protected routes
+    - Use RefreshDatabase so each test starts with a clean database
+    - assertJsonCount(N, 'data.items') verifies factory data appears in response
+    - Method names: snake_case, describe the scenario not the implementation
+    - Test only real registered routes — testing a non-existent route gives a
+      misleading 404 failure that hides the actual problem
+
+RUNNING TESTS:
+
+    php artisan test
+    php artisan test --filter AdminV1CategoryTest
+    php artisan test --filter admin_v1_categories_index
+
+
+================================================================
+QUICK REFERENCE — ADDING A NEW VERSIONED RESOURCE
+================================================================
+
+[ ] php artisan make:model Foo -mfs
+[ ] php artisan make:controller --api --model=Foo Admin/V1/FooController
+[ ] php artisan make:resource Admin/V1/FooResource
+[ ] php artisan make:request Admin/V1/FooRequest
+[ ] Extend FooRequest from ApiFormRequests (not FormRequest)
+[ ] Register route in routes/admin/v1.php:
+        Route::apiResource('foos', FooController::class);
+[ ] Use $request->validated() in all controller methods
+[ ] Wrap single responses: new FooResource($model)
+[ ] Wrap paginated responses: $this->apiResponse->paginated($models, FooResource::class)
+[ ] php artisan route:list to verify
+[ ] Write feature tests in tests/Feature/AdminV1CategoryTest.php
+        — import PHPUnit\Framework\Attributes\Test
+        — use #[Test] attribute, snake_case method name, void return type
+        — assert 'success', 'code', 'data.items' structure for paginated endpoints
+[ ] php artisan test to confirm all tests pass
