@@ -14,6 +14,7 @@ logic are shared and never versioned.
 | Controllers | Migrations |
 | API Resources | Services / business logic |
 | Form Requests (when validation changes) | Observers, Events, Jobs |
+| Feature Tests | |
 
 Models represent the database table — they don't change between versions.
 What changes between v1 and v2 is **how** you expose that data, which is the
@@ -411,6 +412,92 @@ It is already handled in `bootstrap/app.php` and returns the standard error enve
 
 ---
 
+## Feature Testing
+
+Feature tests cover versioned endpoints end-to-end — real HTTP request through
+middleware, auth, controller, resource, and response shape.
+One test class per resource group, mirroring the controller structure.
+
+```
+tests/
+    Feature/
+        AdminV1CategoryTest.php    ← admin API tests (categories, auth, etc.)
+```
+
+### Required setup
+
+```php
+use PHPUnit\Framework\Attributes\Test; // MUST import — without this, #[Test]
+                                       // is silently ignored and the method never runs
+
+class AdminV1CategoryTest extends TestCase
+{
+    use RefreshDatabase, WithFaker;
+
+    protected User $adminUser;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->adminUser = User::factory()->create([
+            'email'       => 'admin@example.com',
+            'password'    => bcrypt('password123'),
+            'system_role' => 'admin',
+        ]);
+    }
+}
+```
+
+### Writing a test — categories index
+
+```php
+#[Test]
+public function admin_v1_categories_index_returns_paginated_list(): void
+{
+    Category::factory(3)->create();
+
+    $response = $this->actingAs($this->adminUser, 'sanctum')
+        ->getJson('/api/admin/v1/categories');
+
+    $response->assertStatus(200)
+        ->assertJsonStructure([
+            'success',
+            'message',
+            'code',
+            'data' => [
+                'items',
+                'pagination' => ['total', 'per_page', 'current_page', 'last_page', 'from', 'to'],
+                'links'      => ['first', 'last', 'prev', 'next'],
+            ],
+        ])
+        ->assertJson(['success' => true, 'code' => 200])
+        ->assertJsonCount(3, 'data.items');
+}
+```
+
+### Key rules
+
+| Rule | Why |
+|------|-----|
+| Import `PHPUnit\Framework\Attributes\Test` | Without it, `#[Test]` is silently ignored — method never runs |
+| Return type must be `void` | Returning `JsonResponse` causes a PHP error |
+| Use `actingAs($user, 'sanctum')` | Bypasses Sanctum token flow cleanly for protected routes |
+| Use `RefreshDatabase` | Ensures each test starts with a clean database |
+| `assertJsonCount(N, 'data.items')` | Verifies factory-seeded records appear in the response |
+| snake_case method names | Readable in test output — describe the scenario, not the method |
+| Test only real registered routes | A 404 on a non-existent route hides the actual failure |
+
+### Running tests
+
+```bash
+php artisan test
+php artisan test --filter AdminV1CategoryTest
+php artisan test --filter admin_v1_categories_index
+```
+
+---
+
 ## Quick Reference — Adding a New Versioned Resource
 
 - [ ] `php artisan make:model Foo -mfs`
@@ -423,3 +510,8 @@ It is already handled in `bootstrap/app.php` and returns the standard error enve
 - [ ] Wrap single responses: `new FooResource($model)`
 - [ ] Wrap paginated responses: `$this->apiResponse->paginated($models, FooResource::class)`
 - [ ] `php artisan route:list` to verify
+- [ ] Write feature tests in `tests/Feature/AdminV1CategoryTest.php`
+  - Import `PHPUnit\Framework\Attributes\Test`
+  - Use `#[Test]` attribute, snake_case method name, `void` return type
+  - Assert `success`, `code`, `data.items` structure for paginated endpoints
+- [ ] `php artisan test` to confirm all tests pass
