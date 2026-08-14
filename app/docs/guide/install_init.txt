@@ -1,130 +1,168 @@
-abc-shop.txt
-============
-
-E-commerce  laravel API + react Vite | hindi
-https://www.youtube.com/playlist?list=PLRB0wzP8AS_GMe_1P-hAZOYjn-a2CdhWA
-26 parts
-channel ==> PHP TECH LIFE
-<< original one >>
-
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-==========================================================
-
-1) create back and front of e-commerce portal
+install_init.txt
+================
+Project setup and initial configuration log for laravel-shop-api.
 
 
-create laravel project
+================================================================
+PROJECT ORIGIN
+================================================================
+
+Based on the tutorial series:
+    "React & Laravel eCommerce Project"
+    Channel: PHP TECH LIFE
+    https://www.youtube.com/playlist?list=PLRB0wzP8AS_GMe_1P-hAZOYjn-a2CdhWA
+    26 parts
+
+This project follows the backend part of that series, with significant
+additions and improvements made independently — unified API response system,
+versioning structure, exception handling, and documentation.
 
 
-$ docker-composer up -f
-$ ./shell.sh
-$ mkdir laravel-shop-api
-$ cd laravel-shop-api
-$ composer create-project laravel/laravel laravel-shop-api
+================================================================
+1. CREATE THE LARAVEL PROJECT
+================================================================
 
-	(after updating devilbox for PHP 8.3 & 8.4, Laravel 13.8.0 was downloaded)
+Start Devilbox and enter the shell:
 
+    $ docker-compose up -f
+    $ ./shell.sh
 
-/etc/hosts:
-127.0.0.1 laravel-shop-api.dvl.to
+Create the project directory and install Laravel:
 
-$ cd ~/
-$ sudo nano /etc/hosts
-(and map IP with host)
+    $ mkdir laravel-shop-api
+    $ cd laravel-shop-api
+    $ composer create-project laravel/laravel laravel-shop-api
 
-
-create devilbox symlink from external directory
-(from manually created, not created by composer)
-$ ln -s laravel-shop-api/public/ htdocs
+    After updating Devilbox for PHP 8.3/8.4 → Laravel 13.8.0 was installed.
 
 
-git init
---------
-	# change authenticated user
-	1. Add the SSH key to the SSH agent:
-	ssh -T git@github.com
-	    Hi rubenK93!
+================================================================
+2. LOCAL DOMAIN SETUP
+================================================================
 
-	eval "$(ssh-agent -s)"
-	ssh-add ~/.ssh/id_adved85_rsa
-	ssh -T git@github.com
-	    Hi adved85!
+Map the domain in /etc/hosts (run on the host machine, not inside Devilbox):
 
+    $ sudo nano /etc/hosts
 
-Database
---------
-> .env
-	#pgsql
-	DB_CONNECTION=pgsql
-	DB_HOST=127.0.0.1
-	DB_PORT=5432
-	DB_DATABASE=laravel_shop_api
-	DB_USERNAME=postgres
-	DB_PASSWORD=
+Add:
+    127.0.0.1   laravel-shop-api.dvl.to
 
-> pgadmin4
-		server: PostgreSQL
-		host name/address: pgsql/ http://localhost:88
-		port: 5432
-		database: laravel_shop_api
-		user: postgres
-		(no password for "postgres" user)
+Local URL: http://laravel-shop-api.dvl.to:88
+    (port changed from 80 to 88 — port 80 is occupied on the host machine)
 
-		✅master password for PGadmin user -> pgadmin4
-		<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+Devilbox port config  →  devilbox/.env:
+    HOST_PORT_HTTPD=88
+    HOST_PORT_HTTPD_SSL=443
 
-	> drop all tables in postgres
-			DROP SCHEMA public CASCADE;
-			CREATE SCHEMA public;
-	> drop all tables and migrate from artisan
-			$ php artisan migrate:fresh
+Create the Devilbox symlink (required when the project was created manually,
+not by Devilbox itself):
+
+    $ ln -s laravel-shop-api/public/ htdocs
 
 
-https://youtu.be/731wley-JfM?list=PLRB0wzP8AS_GMe_1P-hAZOYjn-a2CdhWA&t=907
+================================================================
+3. GIT SETUP
+================================================================
 
+Switch to the correct GitHub identity before initialising the repo:
 
-> add new DB
+    eval "$(ssh-agent -s)"
+    ssh-add ~/.ssh/id_adved85_rsa
+    ssh -T git@github.com        # should print: Hi adved85!
 
-CREATE DATABASE laravel_shop_api
-    ENCODING = 'UTF8'
-    TEMPLATE = template0;
-
-
-> add enum "system_role" to "users" table
-
-    $table->enum('system_role', [
-        'admin',
-        'owner',
-        'customer'
-    ])->default('customer');
-
-
-> run migration
-$ php artisan migrate
-
-
-> next is installing an image management package - intervention image
- (PHP 8.3 or greater is required)
-
-	$composer require intervention/image
-
-> new repo on github
-[dont forget to switch to adved85]
-
-	new preo: laravel-shop-api
-	private
-
-inside the root folder
+Initialise and push:
 
     git config user.name "adved85"
     git config user.email "adved85@gmail.com"
 
-	echo "# laravel-shop-api" >> README.md
-	git init
-	git add README.md
-	git commit -m "first commit"
-	git branch -M main
-	git remote add origin git@github.com:adved85/laravel-shop-api.git
-	# git remote set-url origin git@github.com:adved85/laravel-shop-api.git
-	git push -u origin main
+    echo "# laravel-shop-api" >> README.md
+    git init
+    git add README.md
+    git commit -m "first commit"
+    git branch -M main
+    git remote add origin git@github.com:adved85/laravel-shop-api.git
+    git push -u origin main
 
+
+================================================================
+4. DATABASE SETUP  (PostgreSQL)
+================================================================
+
+Configure .env:
+
+    DB_CONNECTION=pgsql
+    DB_HOST=127.0.0.1
+    DB_PORT=5432
+    DB_DATABASE=laravel_shop_api
+    DB_USERNAME=postgres
+    DB_PASSWORD=
+
+Create the database (run in pgAdmin or DBeaver query tool):
+
+    CREATE DATABASE laravel_shop_api
+        ENCODING = 'UTF8'
+        TEMPLATE = template0;
+
+Run migrations:
+
+    $ php artisan migrate
+
+--- pgAdmin 4 connection ---
+    Host:      pgsql  (or localhost:88 from the browser)
+    Port:      5432
+    Database:  laravel_shop_api
+    User:      postgres
+    Password:  (none for the postgres superuser)
+
+    pgAdmin master password (local only): pgadmin4
+
+--- DBeaver connection ---
+    Host:      127.0.0.1
+    Port:      5432
+    Database:  laravel_shop_api
+    User:      postgres
+    Password:  (none)
+
+    See resources.txt for DBeaver download and feature overview.
+
+--- Reset the database ---
+    -- SQL (drop and recreate all tables):
+    DROP SCHEMA public CASCADE;
+    CREATE SCHEMA public;
+
+    -- or via Artisan:
+    $ php artisan migrate:fresh
+
+
+================================================================
+5. USERS TABLE — system_role ENUM
+================================================================
+
+Add a role column to the users migration:
+
+    $table->enum('system_role', ['admin', 'owner', 'customer'])
+          ->default('customer');
+
+
+================================================================
+6. PACKAGES INSTALLED
+================================================================
+
+Laravel Sanctum (token authentication):
+    Already included in Laravel 13. Configured in bootstrap/app.php.
+    See: https://laravel.com/docs/13.x/sanctum
+
+Intervention Image (image processing, requires PHP 8.3+):
+    $ composer require intervention/image
+    See: https://image.intervention.io/v3
+
+
+================================================================
+7. REFERENCE LINKS
+================================================================
+
+Tutorial walkthrough (DB setup timestamp):
+    https://youtu.be/731wley-JfM?list=PLRB0wzP8AS_GMe_1P-hAZOYjn-a2CdhWA&t=907
+
+Further reading:
+    See app/docs/guide/resources.txt

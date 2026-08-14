@@ -5,6 +5,8 @@ namespace App\Support\API;
 use \Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Resources\Json\JsonResource;
 
 use App\Enums\HTTPCodes;
 
@@ -64,6 +66,27 @@ class ApiResponse
     public function noContent(): Response
     {
         return response()->noContent(); // HTTP 204
+    }
+
+    public function paginated(LengthAwarePaginator $paginator, string $resourceClass, string $message = 'Success'): JsonResponse
+    {
+        return $this->success([
+            'items'      => $resourceClass::collection($paginator->items()),
+            'pagination' => [
+                'total'        => $paginator->total(),
+                'per_page'     => $paginator->perPage(),
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'from'         => $paginator->firstItem(),
+                'to'           => $paginator->lastItem(),
+            ],
+            'links' => [
+                'first' => $paginator->url(1),
+                'last'  => $paginator->url($paginator->lastPage()),
+                'prev'  => $paginator->previousPageUrl(),
+                'next'  => $paginator->nextPageUrl(),
+            ],
+        ], $message);
     }
 
     /**

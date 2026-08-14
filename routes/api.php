@@ -1,8 +1,9 @@
 <?php
 
-use App\Http\Controllers\admin\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+use App\Http\Controllers\Admin\AuthController;
 
 Route::prefix('admin')->group(function () {
 
@@ -16,5 +17,7 @@ Route::get('/user', function (Request $request) {
 
 Route::middleware('auth:sanctum')->group(function() {
     Route::post('/admin/logout', [AuthController::class, 'logout']);
-
 });
+
+
+Route::prefix('admin/v1')->name('admin.v1.')->middleware('auth:sanctum')->group(base_path('routes/admin/v1.php'));
