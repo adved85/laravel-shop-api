@@ -22,8 +22,11 @@ class CategoryController extends Controller
 
     public function store(CategoryRequest $request)
     {
-        $category = Category::create($request->validated());
-        return $this->apiResponse->created(new CategoryResource($category));
+        $validated = $request->validated();
+        $validated['order'] = Category::computeOrder($validated);
+
+        $category = Category::create($validated);
+        return $this->apiResponse->created(new CategoryResource($category->refresh()));
     }
 
     public function show(Category $category)

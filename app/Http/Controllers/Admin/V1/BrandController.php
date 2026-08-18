@@ -26,8 +26,11 @@ class BrandController extends Controller
      */
     public function store(BrandRequest $request)
     {
-        $brand = Brand::create($request->validated());
-        return $this->apiResponse->created(new BrandResource($brand));
+        $validated = $request->validated();
+        $validated['order'] = Brand::computeOrder($validated);
+
+        $brand = Brand::create($validated);
+        return $this->apiResponse->created(new BrandResource($brand->refresh()));
     }
 
     /**
