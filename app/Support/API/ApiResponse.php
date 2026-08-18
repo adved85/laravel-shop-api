@@ -6,7 +6,7 @@ use \Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Http\Resources\Json\JsonResource;
+// use Illuminate\Http\Resources\Json\JsonResource;
 
 use App\Enums\HTTPCodes;
 
