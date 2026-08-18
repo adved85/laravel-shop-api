@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasComputedOrder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Brand extends Model
 {
     /** @use HasFactory<\Database\Factories\BrandFactory> */
-    use HasFactory;
+    use HasFactory, HasComputedOrder;
 
     protected $fillable = [
         'name',
