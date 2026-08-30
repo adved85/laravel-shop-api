@@ -1,0 +1,554 @@
+# Publisher Explanation
+```yaml
+  path: (`.github/workflows/docker-publish.yml`)
+```
+
+Unfamiliar with "job", "step", "runner", "action", or "package/GHCR"? See
+[`github_actions_and_packages_glossary.md`](github_actions_and_packages_glossary.md).
+
+The purpose of this workflow is:
+
+> **When I create a version tag like `v1.2.3`, run the tests first. If they pass, build the Docker image and publish it to GitHub Container Registry (GHCR).**
+
+---
+
+## 1. Basic configuration
+
+```yaml
+name: Publish Docker image
+```
+
+The workflow's name shown in GitHub Actions.
+
+---
+
+## 2. When does it run?
+
+```yaml
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+```
+
+Two ways to start it.
+
+### A. Push a version tag
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+Because it matches:
+
+```text
+v*.*.*
+```
+
+Examples:
+
+```text
+v1.0.0   ✅
+v2.15.3  ✅
+v1.2     ❌
+```
+
+### B. Manually
+
+`workflow_dispatch` gives you a **Run workflow** button in GitHub Actions.
+
+---
+
+## 3. Permissions
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+```
+
+The workflow can:
+
+```text
+contents: read     → read/checkout your repository
+packages: write    → push Docker images to GHCR
+```
+
+This allows:
+
+```text
+GitHub Actions → GHCR
+```
+
+---
+
+## 4. Environment variables
+
+```yaml
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+```
+
+Instead of repeating values everywhere.
+
+If the repository is:
+
+```text
+adved85/laravel-shop-api
+```
+
+then:
+
+```yaml
+${{ github.repository }}
+```
+
+becomes:
+
+```text
+adved85/laravel-shop-api
+```
+
+Therefore the final image name is:
+
+```text
+ghcr.io/adved85/laravel-shop-api
+```
+
+---
+
+## 5. `verify` job
+
+```yaml
+verify:
+  name: Verify
+  uses: ./.github/workflows/ci.yml
+```
+
+This says:
+
+> **Before publishing the Docker image, run my existing `ci.yml` workflow.**
+
+You don't need to duplicate your PHPUnit/Pest, Pint, Docker verification, etc. here.
+
+Conceptually:
+
+```text
+v1.2.3 tag
+    ↓
+run ci.yml
+    ↓
+tests pass?
+    ↓
+YES
+```
+
+---
+
+## 6. `build-and-push` job
+
+```yaml
+build-and-push:
+  needs: verify
+```
+
+`needs` means:
+
+> **Don't start this job until `verify` succeeds.**
+
+So:
+
+```text
+verify
+   │
+   │ success
+   ▼
+build-and-push
+```
+
+If tests fail:
+
+```text
+verify ❌
+   │
+   ▼
+build-and-push ❌ skipped
+```
+
+This prevents publishing a bad image.
+
+---
+
+## 7. Prepare the Ubuntu machine
+
+```yaml
+runs-on: ubuntu-latest
+```
+
+GitHub gives the job a temporary Ubuntu runner.
+
+---
+
+## Checkout your code
+
+```yaml
+- name: Checkout code
+  uses: actions/checkout@v4
+```
+
+Downloads your repository onto the runner.
+
+```text
+GitHub repository
+       ↓
+GitHub runner
+```
+
+---
+
+## 8. Set up Docker Buildx
+
+```yaml
+- name: Set up Docker Buildx
+  uses: docker/setup-buildx-action@v3
+```
+
+Sets up modern Docker image building.
+
+Think of Buildx as:
+
+> **The Docker build engine used by GitHub Actions.**
+
+---
+
+## 9. Login to GHCR
+
+```yaml
+- name: Log in to GHCR
+  uses: docker/login-action@v3
+```
+
+with:
+
+```yaml
+registry: ${{ env.REGISTRY }}
+username: ${{ github.actor }}
+password: ${{ secrets.GITHUB_TOKEN }}
+```
+
+This authenticates Docker against:
+
+```text
+ghcr.io
+```
+
+`GITHUB_TOKEN` is automatically provided by GitHub Actions.
+
+You don't need to manually create/store a Docker password here.
+
+---
+
+## 10. Generate Docker image tags
+
+```yaml
+- name: Extract image metadata
+  id: meta
+  uses: docker/metadata-action@v5
+```
+
+This action figures out **what tags your Docker image should have**.
+
+For example, if you push:
+
+```text
+v1.2.3
+```
+
+these rules:
+
+```yaml
+tags: |
+  type=semver,pattern={{version}}
+  type=semver,pattern={{major}}.{{minor}}
+```
+
+produce:
+
+```text
+ghcr.io/adved85/laravel-shop-api:1.2.3
+ghcr.io/adved85/laravel-shop-api:1.2
+```
+
+Notice that the `v` is removed.
+
+So:
+
+```text
+Git tag:       v1.2.3
+Docker tags:   1.2.3
+               1.2
+```
+
+---
+
+## What about `latest`?
+
+`metadata-action` automatically creates:
+
+```text
+latest
+```
+
+for a normal stable release.
+
+So `v1.2.3` can produce:
+
+```text
+ghcr.io/adved85/laravel-shop-api:1.2.3
+ghcr.io/adved85/laravel-shop-api:1.2
+ghcr.io/adved85/laravel-shop-api:latest
+```
+
+But:
+
+```text
+v2.0.0-rc1
+```
+
+does **not** move `latest` to the release candidate.
+
+That's useful because `latest` continues to point to the current stable release.
+
+---
+
+## SHA tag
+
+```yaml
+type=sha,prefix=,enable=${{ github.event_name == 'workflow_dispatch' }}
+```
+
+This adds a Git commit SHA tag **only when you manually run the workflow**.
+
+For example:
+
+```text
+ghcr.io/adved85/laravel-shop-api:abc1234
+```
+
+This gives you an exact, immutable reference to the commit.
+
+---
+
+## 11. Build and push
+
+Finally:
+
+```yaml
+- name: Build and push image
+  uses: docker/build-push-action@v6
+```
+
+with:
+
+```yaml
+context: .
+push: true
+```
+
+means:
+
+> Build the Dockerfile in the current repository and push the resulting image.
+
+And:
+
+```yaml
+tags: ${{ steps.meta.outputs.tags }}
+```
+
+uses the tags generated by the previous `meta` step.
+
+Ultimately:
+
+```text
+Git tag v1.2.3
+       ↓
+    verify
+       ↓
+   tests pass
+       ↓
+ Docker build
+       ↓
+    push
+       ↓
+GHCR
+       ↓
+ghcr.io/adved85/laravel-shop-api:1.2.3
+ghcr.io/adved85/laravel-shop-api:1.2
+ghcr.io/adved85/laravel-shop-api:latest
+```
+
+---
+
+## 12. Docker build cache
+
+These two lines:
+
+```yaml
+cache-from: type=gha
+cache-to: type=gha,mode=max
+```
+
+tell Buildx to use **GitHub Actions cache**.
+
+Without caching:
+
+```text
+every build
+   ↓
+install dependencies
+   ↓
+install packages
+   ↓
+compile/build everything
+```
+
+With caching:
+
+```text
+previous build layers
+        ↓
+   reuse unchanged layers
+        ↓
+      faster build
+```
+
+This is also why the comment says that the earlier `ci.yml` build can **warm the shared cache**.
+
+---
+
+## 13. `labels`
+
+This line:
+
+```yaml
+labels: ${{ steps.meta.outputs.labels }}
+```
+
+adds **metadata to the Docker image**.
+
+There is an important distinction:
+
+```yaml
+tags: ${{ steps.meta.outputs.tags }}
+```
+
+means:
+
+> **How do I identify/name the image?**
+
+For example:
+
+```text
+ghcr.io/adved85/laravel-shop-api:1.2.3
+ghcr.io/adved85/laravel-shop-api:latest
+```
+
+While:
+
+```yaml
+labels: ${{ steps.meta.outputs.labels }}
+```
+
+means:
+
+> **What information should be attached to the image?**
+
+For example:
+
+```text
+org.opencontainers.image.version=1.2.3
+org.opencontainers.image.source=https://github.com/adved85/laravel-shop-api
+org.opencontainers.image.revision=abc123...
+org.opencontainers.image.created=...
+```
+
+These are **metadata**, not image tags.
+
+The `metadata-action` step calculates both:
+
+```text
+steps.meta.outputs.tags
+        ↓
+Docker tags
+
+steps.meta.outputs.labels
+        ↓
+Docker labels
+```
+
+Then the build step uses them:
+
+```yaml
+- name: Build and push image
+  uses: docker/build-push-action@v6
+  with:
+    tags: ${{ steps.meta.outputs.tags }}
+    labels: ${{ steps.meta.outputs.labels }}
+```
+
+You don't strictly need `labels` for the image to work. They mainly make the image more traceable and self-describing.
+
+---
+
+## The whole workflow in one picture
+
+```text
+                git push v1.2.3
+                       │
+                       ▼
+              GitHub Actions starts
+                       │
+                       ▼
+                  ┌─────────┐
+                  │  verify │
+                  │  ci.yml │
+                  └────┬────┘
+                       │
+                 tests pass?
+                  /          \
+                NO            YES
+                │              │
+                ▼              ▼
+              STOP       Docker Buildx
+                               │
+                               ▼
+                         Docker build
+                               │
+                               ▼
+                         GHCR login
+                               │
+                               ▼
+                         Docker push
+                               │
+                               ▼
+                  ghcr.io/adved85/laravel-shop-api
+```
+
+---
+
+## The key idea
+
+This workflow separates **CI** from **publishing**:
+
+```text
+ci.yml
+  = "Is the code good?"
+
+docker-publish.yml
+  = "The code is good → create and publish a versioned Docker image."
+```
+
+That's a sensible production setup because **every commit doesn't need to build and push a production Docker image**. Only an explicit version release does.
