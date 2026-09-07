@@ -116,7 +116,7 @@ jobs:
   test:
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
   lint:
   security:
   build:
@@ -126,7 +126,7 @@ jobs:
 > side by side — a real job needs at least `runs-on` and `steps` to be
 > valid.
 
-`actions/checkout@v4` → something like `git clone` your repo, at the exact
+`actions/checkout@v7` → something like `git clone` your repo, at the exact
 commit the workflow run was triggered from.
 
 ---
@@ -147,12 +147,26 @@ this repo's own workflows:
 
 | Action | What it does, in one line |
 |---|---|
-| `actions/checkout@v4` | Clones your repo onto the runner, at the commit the workflow was triggered from. |
-| `actions/cache@v4` | Saves/restores files (e.g. Composer's cache dir) between runs, keyed on something like `composer.lock`'s hash. |
+| `actions/checkout@v7` | Clones your repo onto the runner, at the commit the workflow was triggered from. |
+| `actions/cache@v6` | Saves/restores files (e.g. Composer's cache dir) between runs, keyed on something like `composer.lock`'s hash. |
 | `shivammathur/setup-php@v2` | Installs and configures a specific PHP version + extensions on the runner. |
-| `docker/setup-buildx-action@v3` | Sets up Buildx, the modern Docker build engine (multi-stage builds, layer caching). |
-| `docker/login-action@v3` | Logs Docker in to a registry (here, GHCR) using the credentials you give it. |
-| `docker/metadata-action@v5` | Computes Docker image tags/labels from the triggering git ref — e.g. turns tag `v1.2.3` into image tags `1.2.3`, `1.2`, `latest`. |
+| `docker/setup-buildx-action@v4` | Sets up Buildx, the modern Docker build engine (multi-stage builds, layer caching). |
+| `docker/login-action@v4` | Logs Docker in to a registry (here, GHCR) using the credentials you give it. |
+| `docker/metadata-action@v6` | Computes Docker image tags/labels from the triggering git ref — e.g. turns tag `v1.2.3` into image tags `1.2.3`, `1.2`, `latest`. |
+
+> **Pinning policy here: major tags.** `@v7` is a *moving* tag — it
+> follows every patch and minor release inside that major, so security
+> fixes arrive without a commit from us, while a breaking new major never
+> lands unannounced. The trade-off: a pinned major eventually goes stale —
+> GitHub periodically deprecates the Node.js runtime an older major was
+> built on, and every step using it starts printing a deprecation warning
+> in the Actions log. That warning is the actual signal to bump: check
+> each action's release notes, then update the `.yml` files and this
+> doc's tables together, in the same commit — otherwise the docs quietly
+> start lying about what's really pinned. (The stricter alternative —
+> pinning an exact commit SHA — is immune to a compromised or force-moved
+> tag, but turns every routine update into a manual diff. Worth it for an
+> action many other projects depend on; unnecessary overhead here.)
 
 ---
 

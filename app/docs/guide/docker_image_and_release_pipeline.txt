@@ -65,7 +65,7 @@ Neither ci.yml nor docker-publish.yml contains the word "Dockerfile"
 anywhere in their YAML. No step says `file: Dockerfile`. So what makes
 them build it?
 
-    - uses: docker/build-push-action@v6
+    - uses: docker/build-push-action@v7
       with:
         context: .
 
@@ -78,7 +78,7 @@ default -- confirmed directly from the tool itself:
 
 So the chain is:
 
-    actions/checkout@v4   --> puts the whole repo (Dockerfile included)
+    actions/checkout@v7   --> puts the whole repo (Dockerfile included)
                                onto the runner's disk
 
     context: .             --> "build from the current directory"

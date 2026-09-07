@@ -196,7 +196,7 @@ GitHub gives the job a temporary Ubuntu runner.
 
 ```yaml
 - name: Checkout code
-  uses: actions/checkout@v4
+  uses: actions/checkout@v7
 ```
 
 Downloads your repository onto the runner.
@@ -213,7 +213,7 @@ GitHub runner
 
 ```yaml
 - name: Set up Docker Buildx
-  uses: docker/setup-buildx-action@v3
+  uses: docker/setup-buildx-action@v4
 ```
 
 Sets up modern Docker image building.
@@ -228,7 +228,7 @@ Think of Buildx as:
 
 ```yaml
 - name: Log in to GHCR
-  uses: docker/login-action@v3
+  uses: docker/login-action@v4
 ```
 
 with:
@@ -256,7 +256,7 @@ You don't need to manually create/store a Docker password here.
 ```yaml
 - name: Extract image metadata
   id: meta
-  uses: docker/metadata-action@v5
+  uses: docker/metadata-action@v6
 ```
 
 This action figures out **what tags your Docker image should have**.
@@ -348,7 +348,7 @@ Finally:
 
 ```yaml
 - name: Build and push image
-  uses: docker/build-push-action@v6
+  uses: docker/build-push-action@v7
 ```
 
 with:
@@ -493,7 +493,7 @@ Then the build step uses them:
 
 ```yaml
 - name: Build and push image
-  uses: docker/build-push-action@v6
+  uses: docker/build-push-action@v7
   with:
     tags: ${{ steps.meta.outputs.tags }}
     labels: ${{ steps.meta.outputs.labels }}

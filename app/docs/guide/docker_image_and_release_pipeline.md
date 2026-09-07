@@ -69,7 +69,7 @@ anywhere in their YAML. No step says `file: Dockerfile`. So what makes them
 build it?
 
 ```yaml
-- uses: docker/build-push-action@v6
+- uses: docker/build-push-action@v7
   with:
     context: .
 ```
@@ -86,7 +86,7 @@ $ docker buildx build --help
 So the chain is:
 
 ```text
-actions/checkout@v4   →  puts the whole repo (Dockerfile included) onto
+actions/checkout@v7   →  puts the whole repo (Dockerfile included) onto
                           the runner's disk
 
 context: .             →  "build from the current directory"
