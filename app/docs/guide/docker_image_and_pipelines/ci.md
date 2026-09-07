@@ -143,7 +143,7 @@ before your tests need it.
 
 ```yaml
 - name: Checkout code
-  uses: actions/checkout@v4
+  uses: actions/checkout@v7
 ```
 
 Downloads your repository into the GitHub runner.
@@ -201,7 +201,7 @@ Finds where Composer stores downloaded packages.
 Then:
 
 ```yaml
-actions/cache@v4
+actions/cache@v6
 ```
 
 stores that cache between CI runs.
@@ -330,7 +330,7 @@ This catches Dockerfile problems early.
 Same as before:
 
 ```yaml
-actions/checkout@v4
+actions/checkout@v7
 ```
 
 Get source code.
@@ -338,7 +338,7 @@ Get source code.
 ### Buildx
 
 ```yaml
-docker/setup-buildx-action@v3
+docker/setup-buildx-action@v4
 ```
 
 Sets up modern Docker Buildx for building images and caching.
@@ -349,7 +349,7 @@ Sets up modern Docker Buildx for building images and caching.
 
 ```yaml
 - name: Build image
-  uses: docker/build-push-action@v6
+  uses: docker/build-push-action@v7
 ```
 
 Builds your Dockerfile.
