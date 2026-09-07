@@ -100,7 +100,7 @@ php artisan make:request Admin/V1/BrandRequest
 
 - Inject `ApiResponse` via constructor
 - `index()` → `Brand::paginate(20)`, return `apiResponse->paginated(...)`
-- `store()` → `Brand::create($request->validated())`, return `->created(new BrandResource(...))`
+- `store()` → computes `order` explicitly, then `Brand::create($validated)`, return `->created(new BrandResource($brand->refresh()))` — see [`explicit_incremental_ordering.md`](explicit_incremental_ordering.md) for why
 - `show()` → return `->ok(new BrandResource($brand))`
 - `update()` → `$brand->update($request->validated())`, return `->ok(new BrandResource($brand->refresh()))`
 - `destroy()` → `$brand->delete()`, return `->noContent()`
