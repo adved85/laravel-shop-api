@@ -116,7 +116,7 @@ jobs:
       - name: Verify required PHP extensions are present
         run: |
           docker run --rm --entrypoint php laravel-shop-api:ci -m > extensions.txt
-          for ext in gd pdo_pgsql pgsql Zend\ OPcache bcmath pcntl exif zip intl; do
+          for ext in gd pdo_pgsql pgsql Zend\ OPcache bcmath pcntl exif zip intl sockets mbstring; do
             grep -qi "^${ext}$" extensions.txt || { echo "Missing PHP extension: ${ext}"; exit 1; }
           done
           echo "All required extensions present."

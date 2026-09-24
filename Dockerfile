@@ -20,7 +20,8 @@ RUN install-php-extensions \
     pcntl \
     exif \
     zip \
-    intl
+    intl \
+    sockets
 
 WORKDIR /var/www/html
 
